@@ -2,6 +2,12 @@ package br.uffs.cc.jarena;
 
 public class AgenteGuarana extends Agente {
 
+    private static final int EXPLORADOR = 0;
+    private static final int COMBATENTE = 1;
+    private static final int COLETOR = 2;
+
+    private final int papel;
+
     private final int setorMinX;
     private final int setorMaxX;
     private final int setorMinY;
@@ -19,6 +25,11 @@ public class AgenteGuarana extends Agente {
 
     public AgenteGuarana(Integer x, Integer y, Integer energia) {
         super(x, y, energia);
+
+        // O papel sai do identificador do agente. Nao existe lider: cada um
+        // decide sozinho, o papel so define a prioridade de cada agente.
+        papel = getId() % 5 == 0 ? EXPLORADOR
+                : getId() % 5 == 1 ? COMBATENTE : COLETOR;
 
         // O mapa e dividido em 15 setores: 3 colunas por 5 linhas.
         int coluna = (getId() % 3);
