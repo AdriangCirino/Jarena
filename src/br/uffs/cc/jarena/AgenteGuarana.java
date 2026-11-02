@@ -23,6 +23,13 @@ public class AgenteGuarana extends Agente {
     private int direcaoVertical;
     private int passosVerticais;
 
+    private boolean recebendoEnergia;
+    private int turnosSemEnergia;
+
+    private int alvoCogumeloX = -1;
+    private int alvoCogumeloY = -1;
+    private int validadeCogumelo;
+
     public AgenteGuarana(Integer x, Integer y, Integer energia) {
         super(x, y, energia);
 
@@ -51,10 +58,23 @@ public class AgenteGuarana extends Agente {
     @Override
     public void pensa() {
         turno++;
+        atualizaTemporizadores();
 
         if (primeiroTurno) {
             primeiroTurno = false;
             para();
+            return;
+        }
+
+        // Recebendo energia: nao sai do lugar de jeito nenhum. Parado em cima
+        // de um ponto o saldo e de +4 por turno, o melhor do jogo.
+        if (recebendoEnergia) {
+            para();
+            return;
+        }
+
+        if (validadeCogumelo > 0 && deveBuscarCogumelo()) {
+            moverParaCoordenada(alvoCogumeloX, alvoCogumeloY);
             return;
         }
 
@@ -72,6 +92,30 @@ public class AgenteGuarana extends Agente {
         }
 
         fazVarredura();
+    }
+
+    /**
+     * As informacoes sobre ponto de energia tem validade curta de proposito:
+     * o ponto se move, entao uma coordenada velha e pior que nenhuma.
+     */
+    private void atualizaTemporizadores() {
+        if (recebendoEnergia) {
+            turnosSemEnergia++;
+            if (turnosSemEnergia > 2) {
+                recebendoEnergia = false;
+            }
+        }
+
+        if (validadeCogumelo > 0) {
+            validadeCogumelo--;
+        }
+    }
+
+    private boolean deveBuscarCogumelo() {
+        if (papel == EXPLORADOR) {
+            return distancia(alvoCogumeloX, alvoCogumeloY) <= 70;
+        }
+        return true;
     }
 
     private boolean estaDentroDoSetor() {
@@ -184,6 +228,10 @@ public class AgenteGuarana extends Agente {
 
     @Override
     public void recebeuEnergia() {
+        recebendoEnergia = true;
+        turnosSemEnergia = 0;
+        alvoCogumeloX = getX();
+        alvoCogumeloY = getY();
     }
 
     @Override
