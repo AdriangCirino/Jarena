@@ -47,5 +47,5 @@ When the application is running, you can terminate it by pressing `Q`. Use the `
 If you liked the project and want to help, you are welcome! Submit pull requests or [open a new issue](https://github.com/Dovyski/Jarena/issues) describing your idea.
 
 ## License
-
+...
 Jarena is licensed under the MIT license.
