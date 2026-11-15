@@ -19,6 +19,7 @@ public class AgenteGuarana extends Agente {
     private int validadeCogumelo;
 
     private boolean recebendoEnergia;
+    private int turnosNoCogumelo;
     private int turnosSemEnergia;
     private int ultimoEnvioEnergia = -100;
 
@@ -66,29 +67,41 @@ public class AgenteGuarana extends Agente {
                 iniciaFuga();
                 return;
             }
-            para();
+            if (podeMoverPara(dirH)) {
+                setDirecao(dirH);
+            }
+            return;
+        }
+
+        if (getEnergia() >= 1550 && podeDividir()) {
+            divide();
             return;
         }
 
         if (recebendoEnergia) {
-            para();
+            turnosNoCogumelo++;
+            if (turnosNoCogumelo % 4 == 0) {
+                andaUmPassoQualquer();
+            } else {
+                para();
+            }
             return;
         }
+        turnosNoCogumelo = 0;
 
         if (validadeCogumelo > 0 && distancia(cogumeloX, cogumeloY) <= 180) {
             moverPara(cogumeloX, cogumeloY);
             return;
         }
 
-        if (turno % 2 != 0) {
-            para();
-            return;
-        }
-
         int centroX = (setorMinX + setorMaxX) / 2;
         int centroY = (setorMinY + setorMaxY) / 2;
         if (!estaNoSetor()) {
-            moverPara(centroX, centroY);
+            if (turno % 3 == 0) {
+                para();
+            } else {
+                moverPara(centroX, centroY);
+            }
             return;
         }
 
@@ -117,9 +130,15 @@ public class AgenteGuarana extends Agente {
     }
 
     private void patrulhaSetor() {
+        if (turno % 3 == 0) {
+            para();
+            return;
+        }
+
         int proxX = getX() + (dirH == DIREITA ? 5 : -5);
         if (proxX < setorMinX + 15 || proxX > setorMaxX - 15 || !podeMoverPara(dirH)) {
             dirH = direcaoOposta(dirH);
+
             int proxY = getY() + (dirV == BAIXO ? 15 : -15);
             if (proxY < setorMinY + 15 || proxY > setorMaxY - 15 || !podeMoverPara(dirV)) {
                 dirV = direcaoOposta(dirV);
@@ -129,27 +148,56 @@ public class AgenteGuarana extends Agente {
                 return;
             }
         }
-        if (podeMoverPara(dirH)) setDirecao(dirH);
-        else para();
+
+        if (podeMoverPara(dirH)) {
+            setDirecao(dirH);
+        } else {
+            andaUmPassoQualquer();
+        }
     }
 
     private void moverPara(int destinoX, int destinoY) {
         int dx = destinoX - getX();
         int dy = destinoY - getY();
+
         if (Math.abs(dx) <= 5 && Math.abs(dy) <= 5) {
-            para();
+            andaUmPassoQualquer();
             return;
         }
-        int prim = Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? DIREITA : ESQUERDA) : (dy > 0 ? BAIXO : CIMA);
-        int seg = Math.abs(dx) >= Math.abs(dy) ? (dy > 0 ? BAIXO : CIMA) : (dx > 0 ? DIREITA : ESQUERDA);
-        if (podeMoverPara(prim)) setDirecao(prim);
-        else if ((dx != 0 && dy != 0) && podeMoverPara(seg)) setDirecao(seg);
-        else para();
+
+        int prim = Math.abs(dx) >= Math.abs(dy)
+                ? (dx > 0 ? DIREITA : ESQUERDA)
+                : (dy > 0 ? BAIXO : CIMA);
+        int seg = Math.abs(dx) >= Math.abs(dy)
+                ? (dy > 0 ? BAIXO : CIMA)
+                : (dx > 0 ? DIREITA : ESQUERDA);
+
+        if (podeMoverPara(prim)) {
+            setDirecao(prim);
+        } else if ((dx != 0 && dy != 0) && podeMoverPara(seg)) {
+            setDirecao(seg);
+        } else {
+            andaUmPassoQualquer();
+        }
+    }
+
+    private void andaUmPassoQualquer() {
+        int[] dirs = {DIREITA, BAIXO, ESQUERDA, CIMA};
+        for (int i = 0; i < 4; i++) {
+            int d = dirs[(turno + i) % 4];
+            if (podeMoverPara(d)) {
+                setDirecao(d);
+                return;
+            }
+        }
+        para();
     }
 
     private void iniciaFuga() {
         dirFuga = direcaoOposta(getDirecao());
-        if (!podeMoverPara(dirFuga)) dirFuga = direcaoOposta(dirH);
+        if (!podeMoverPara(dirFuga)) {
+            dirFuga = direcaoOposta(dirH);
+        }
         fugaTicks = 6;
         emCombate = false;
         turnosCombate = 0;
@@ -158,32 +206,46 @@ public class AgenteGuarana extends Agente {
     }
 
     private void executaFuga() {
-        if (podeMoverPara(dirFuga)) setDirecao(dirFuga);
-        else para();
+        if (podeMoverPara(dirFuga)) {
+            setDirecao(dirFuga);
+        } else {
+            andaUmPassoQualquer();
+        }
         fugaTicks--;
     }
 
     private boolean deveDividirCombate() {
-        return !jaDividiu && turnosCombate >= 2
-                && getEnergia() >= 700 && getEnergia() <= 1300
-                && energiaInimigo <= 350 && getEnergia() >= energiaInimigo * 2 + 100
+        return !jaDividiu
+                && turnosCombate >= 2
+                && getEnergia() >= 700
+                && getEnergia() <= 1300
+                && energiaInimigo <= 350
+                && getEnergia() >= energiaInimigo * 2 + 100
                 && podeDividir();
     }
 
     private void atualizaTemporizadores() {
-        if (recebendoEnergia && ++turnosSemEnergia > 2) recebendoEnergia = false;
+        if (recebendoEnergia && ++turnosSemEnergia > 2) {
+            recebendoEnergia = false;
+        }
         if (emCombate && ++turnosSemDano > 2) {
             emCombate = false;
             turnosCombate = 0;
             jaDividiu = false;
         }
-        if (validadeCogumelo > 0) validadeCogumelo--;
+        if (validadeCogumelo > 0) {
+            validadeCogumelo--;
+        }
     }
 
     @Override
     public void recebeuEnergia() {
         recebendoEnergia = true;
         turnosSemEnergia = 0;
+        cogumeloX = getX();
+        cogumeloY = getY();
+        validadeCogumelo = 6;
+
         if (turno - ultimoEnvioEnergia >= 6) {
             ultimoEnvioEnergia = turno;
             enviaMensagem("C|" + getX() + "|" + getY());
