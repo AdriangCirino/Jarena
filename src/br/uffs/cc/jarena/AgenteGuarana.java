@@ -1,9 +1,5 @@
 package br.uffs.cc.jarena;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
-
 public class AgenteGuarana extends Agente {
 
     private static final int EXPLORADOR = 0;
@@ -38,18 +34,13 @@ public class AgenteGuarana extends Agente {
     private int validadeCogumelo;
 
     private boolean emCombate;
-    private int combateX;
-    private int combateY;
     private int energiaInimigo;
     private int turnosCombate;
     private int turnosSemDano;
-    private int validadeCombate;
     private boolean jaDividiuNoCombate;
 
     private int recuoTicks;
     private int direcaoRecuo;
-
-    private final Map<Integer, int[]> aliados = new HashMap<Integer, int[]>();
 
     public AgenteGuarana(Integer x, Integer y, Integer energia) {
         super(x, y, energia);
@@ -79,7 +70,6 @@ public class AgenteGuarana extends Agente {
     public void pensa() {
         turno++;
         atualizaTemporizadores();
-        removeAliadosAntigos();
 
         if (primeiroTurno) {
             primeiroTurno = false;
@@ -96,31 +86,22 @@ public class AgenteGuarana extends Agente {
             return;
         }
 
-        if (turno % 8 == 0) {
-            enviaMensagem("P|" + getId() + "|" + getX() + "|" + getY() + "|" + getEnergia());
-        }
-
         if (emCombate) {
             if (deveDividir()) {
                 jaDividiuNoCombate = true;
                 divide();
                 return;
             }
-            if (deveRecuar()) {
+            if (turnosCombate >= 4 && energiaInimigo > getEnergia() + 120) {
                 iniciaRecuo();
-            } else {
-                para();
                 return;
             }
+            para();
+            return;
         }
 
         if (recuoTicks > 0) {
             executaRecuo();
-            return;
-        }
-
-        if (validadeCombate > 0 && (papel == COMBATENTE || distancia(combateX, combateY) <= 100)) {
-            moverParaCoordenada(combateX, combateY);
             return;
         }
 
@@ -157,15 +138,6 @@ public class AgenteGuarana extends Agente {
             jaDividiuNoCombate = false;
         }
         if (validadeCogumelo > 0) validadeCogumelo--;
-        if (validadeCombate > 0) validadeCombate--;
-    }
-
-    private void removeAliadosAntigos() {
-        ArrayList<Integer> remover = new ArrayList<Integer>();
-        for (Map.Entry<Integer, int[]> entrada : aliados.entrySet()) {
-            if (turno - entrada.getValue()[3] > 15) remover.add(entrada.getKey());
-        }
-        for (Integer id : remover) aliados.remove(id);
     }
 
     private boolean estaDentroDoSetor() {
@@ -221,24 +193,14 @@ public class AgenteGuarana extends Agente {
                 && podeDividir();
     }
 
-    private boolean deveRecuar() {
-        int qtd = 0;
-        for (int[] info : aliados.values()) {
-            if (turno - info[3] <= 10 && distancia(info[0], info[1], combateX, combateY) <= 100) qtd++;
-        }
-        return turnosCombate >= 8 && energiaInimigo > getEnergia() + 120 && qtd == 0;
-    }
-
     private void iniciaRecuo() {
         direcaoRecuo = direcaoOposta(getDirecao());
         if (!podeMoverPara(direcaoRecuo)) direcaoRecuo = direcaoOposta(direcaoHorizontal);
-        recuoTicks = 8;
+        recuoTicks = 6;
         emCombate = false;
-        validadeCombate = 0;
         turnosCombate = 0;
         jaDividiuNoCombate = false;
         setDirecao(direcaoRecuo);
-        enviaMensagem("R|" + getId() + "|" + getX() + "|" + getY());
     }
 
     private void executaRecuo() {
@@ -251,7 +213,7 @@ public class AgenteGuarana extends Agente {
     public void recebeuEnergia() {
         recebendoEnergia = true;
         turnosSemEnergia = 0;
-        if (turno - ultimoEnvioCogumelo >= 5) {
+        if (turno - ultimoEnvioCogumelo >= 6) {
             ultimoEnvioCogumelo = turno;
             enviaMensagem("C|" + getX() + "|" + getY());
         }
@@ -266,18 +228,12 @@ public class AgenteGuarana extends Agente {
         emCombate = true;
         turnosSemDano = 0;
         turnosCombate++;
-        combateX = getX();
-        combateY = getY();
         energiaInimigo = energiaRestanteInimigo;
-        if (turnosCombate == 1 || turnosCombate % 3 == 1) {
-            enviaMensagem("B|" + getId() + "|" + getX() + "|" + getY() + "|" + energiaRestanteInimigo);
-        }
     }
 
     @Override
     public void ganhouCombate() {
         emCombate = false;
-        validadeCombate = 0;
         turnosCombate = 0;
         jaDividiuNoCombate = false;
     }
@@ -285,29 +241,18 @@ public class AgenteGuarana extends Agente {
     @Override
     public void recebeuMensagem(String msg) {
         if (msg == null) return;
-        String[] p = msg.split("\\|");
         try {
-            if (p[0].equals("P") && p.length == 5) {
-                int id = Integer.parseInt(p[1]);
-                if (id != getId()) {
-                    aliados.put(id, new int[]{Integer.parseInt(p[2]), Integer.parseInt(p[3]), Integer.parseInt(p[4]), turno});
-                }
-            } else if (p[0].equals("C") && p.length == 3 && !emCombate && getEnergia() < 1800) {
+            String[] p = msg.split("\\|");
+            if (p[0].equals("C") && p.length == 3 && !emCombate && getEnergia() < 1800) {
                 alvoCogumeloX = Integer.parseInt(p[1]);
                 alvoCogumeloY = Integer.parseInt(p[2]);
-                validadeCogumelo = 18;
-            } else if (p[0].equals("B") && p.length == 5 && getEnergia() >= 220) {
-                combateX = Integer.parseInt(p[1]);
-                combateY = Integer.parseInt(p[2]);
-                energiaInimigo = Integer.parseInt(p[4]);
-                validadeCombate = 12;
+                validadeCogumelo = 12;
             }
         } catch (Exception ignored) {
         }
     }
 
-    private int distancia(int x, int y) { return distancia(getX(), getY(), x, y); }
-    private int distancia(int x1, int y1, int x2, int y2) { return Math.max(Math.abs(x1 - x2), Math.abs(y1 - y2)); }
+    private int distancia(int x, int y) { return Math.max(Math.abs(getX() - x), Math.abs(getY() - y)); }
 
     private int direcaoOposta(int d) {
         switch (d) {
