@@ -1,16 +1,8 @@
 # Estratégia — Equipe Guaraná (`AgenteGuarana`)
 
-## 1. Objetivo e Premissas da Arena
 
-No Jarena, vence a equipe que mantiver pelo menos um agente vivo por mais tempo. As regras do motor impõem três restrições fundamentais que moldam toda a arquitetura do `AgenteGuarana`:
 
-1. **Custo assimétrico de energia:** manter-se vivo parado custa `1` de energia por turno, enquanto andar custa `3` (`1` base + `2` de movimento). Movimentação desnecessária reduz drasticamente a longevidade da equipe.
-2. **Penalidade anti-inatividade (Ceifador):** agentes que permanecem imóveis por longos períodos no mesmo ponto ficam vulneráveis à eliminação forçada na arena visual.
-3. **Spawn arbitrário e IDs globais:** a equipe pode nascer em qualquer canto, borda ou centro do mapa, e os IDs (`getId()`) são distribuídos globalmente entre todas as equipes da partida, impedindo o uso direto de módulo sobre `getId()` para atribuir papéis ou setores.
-
----
-
-## 2. Arquitetura Enxuta e Ciclo de Vida
+## 1. Arquitetura Enxuta e Ciclo de Vida
 
 O agente opera sem alocações dinâmicas em tempo de execução (`HashMap`, `ArrayList`, `HashSet`) e utiliza um protocolo minimalista de apenas **duas mensagens** (`H` e `C`), dividido em três etapas:
 
@@ -32,7 +24,7 @@ O agente opera sem alocações dinâmicas em tempo de execução (`HashMap`, `Ar
 
 ---
 
-## 3. Combate, Fuga Tática e Divisão
+## 2. Combate, Fuga Tática e Divisão
 
 * **Conservação de energia em combate:** o agente não persegue inimigos pelo mapa. Se entrar em confronto (`tomouDano()`), mantém pressão local sem gastar turnos fugindo à toa.
 * **Fuga tática:** caso enfrente um adversário com vantagem substancial (`energiaInimigo > getEnergia() + 150` após 2 turnos de troca), aciona `iniciaFuga()`, recuando por `6` ticks na direção oposta para preservar o agente.
@@ -42,7 +34,7 @@ O agente opera sem alocações dinâmicas em tempo de execução (`HashMap`, `Ar
 
 ---
 
-## 4. Protocolo de Mensagens
+## 3. Protocolo de Mensagens
 
 | Prefixo | Formato | Emissor | Finalidade |
 | :--- | :--- | :--- | :--- |
