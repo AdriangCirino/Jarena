@@ -2,68 +2,37 @@ package br.uffs.cc.jarena;
 
 public class AgenteGuarana extends Agente {
 
-    private static final int EXPLORADOR = 0;
-    private static final int COMBATENTE = 1;
-    private static final int COLETOR = 2;
-    private static final int ORCAMENTO_EXPLORACAO = 50;
-
-    private final int papel;
-    private final int setorMinX;
-    private final int setorMaxX;
-    private final int setorMinY;
-    private final int setorMaxY;
-    private final int centroSetorX;
-    private final int centroSetorY;
-    private final int energiaInicial;
-
     private int turno;
-    private boolean primeiroTurno = true;
-    private boolean aposentado;
+    private int indiceEquipe;
+    private boolean recebeuHandshake;
+    private boolean inicializado;
 
-    private boolean varreduraHorizontal = true;
-    private int direcaoHorizontal;
-    private int direcaoVertical;
-    private int passosVerticais;
+    private int setorMinX;
+    private int setorMaxX;
+    private int setorMinY;
+    private int setorMaxY;
+    private int dirH;
+    private int dirV;
+
+    private int cogumeloX = -1;
+    private int cogumeloY = -1;
+    private int validadeCogumelo;
 
     private boolean recebendoEnergia;
     private int turnosSemEnergia;
-    private int ultimoEnvioCogumelo = -100;
-
-    private int alvoCogumeloX = -1;
-    private int alvoCogumeloY = -1;
-    private int validadeCogumelo;
+    private int ultimoEnvioEnergia = -100;
 
     private boolean emCombate;
     private int energiaInimigo;
     private int turnosCombate;
     private int turnosSemDano;
-    private boolean jaDividiuNoCombate;
+    private boolean jaDividiu;
 
-    private int recuoTicks;
-    private int direcaoRecuo;
+    private int fugaTicks;
+    private int dirFuga;
 
     public AgenteGuarana(Integer x, Integer y, Integer energia) {
         super(x, y, energia);
-
-        papel = getId() % 5 == 0 ? EXPLORADOR
-                : getId() % 5 == 1 ? COMBATENTE : COLETOR;
-
-        int coluna = (getId() % 3);
-        int linha = (getId() / 3) % 5;
-
-        setorMinX = coluna * Constants.LARGURA_MAPA / 3;
-        setorMaxX = (coluna + 1) * Constants.LARGURA_MAPA / 3;
-        setorMinY = linha * Constants.ALTURA_MAPA / 5;
-        setorMaxY = (linha + 1) * Constants.ALTURA_MAPA / 5;
-
-        centroSetorX = (setorMinX + setorMaxX) / 2;
-        centroSetorY = (setorMinY + setorMaxY) / 2;
-
-        direcaoHorizontal = getId() % 2 == 0 ? DIREITA : ESQUERDA;
-        direcaoVertical = getId() % 4 < 2 ? BAIXO : CIMA;
-        setDirecao(direcaoHorizontal);
-
-        energiaInicial = getEnergia();
     }
 
     @Override
@@ -71,37 +40,33 @@ public class AgenteGuarana extends Agente {
         turno++;
         atualizaTemporizadores();
 
-        if (primeiroTurno) {
-            primeiroTurno = false;
-            para();
+        if (turno == 1) {
+            enviaMensagem("H|" + getId());
+            setDirecao(DIREITA);
             return;
         }
 
-        if (!aposentado && getEnergia() < energiaInicial - ORCAMENTO_EXPLORACAO) {
-            aposentado = true;
+        if (!inicializado) {
+            inicializaSetor();
+            inicializado = true;
         }
 
-        if (aposentado) {
-            para();
+        if (fugaTicks > 0) {
+            executaFuga();
             return;
         }
 
         if (emCombate) {
-            if (deveDividir()) {
-                jaDividiuNoCombate = true;
+            if (deveDividirCombate()) {
+                jaDividiu = true;
                 divide();
                 return;
             }
-            if (turnosCombate >= 4 && energiaInimigo > getEnergia() + 120) {
-                iniciaRecuo();
+            if (energiaInimigo > getEnergia() + 150 && turnosCombate >= 2) {
+                iniciaFuga();
                 return;
             }
             para();
-            return;
-        }
-
-        if (recuoTicks > 0) {
-            executaRecuo();
             return;
         }
 
@@ -110,8 +75,8 @@ public class AgenteGuarana extends Agente {
             return;
         }
 
-        if (validadeCogumelo > 0 && (papel != EXPLORADOR || distancia(alvoCogumeloX, alvoCogumeloY) <= 70)) {
-            moverParaCoordenada(alvoCogumeloX, alvoCogumeloY);
+        if (validadeCogumelo > 0 && distancia(cogumeloX, cogumeloY) <= 180) {
+            moverPara(cogumeloX, cogumeloY);
             return;
         }
 
@@ -120,101 +85,107 @@ public class AgenteGuarana extends Agente {
             return;
         }
 
-        if (!estaDentroDoSetor()) {
-            moverParaCoordenada(centroSetorX, centroSetorY);
+        int centroX = (setorMinX + setorMaxX) / 2;
+        int centroY = (setorMinY + setorMaxY) / 2;
+        if (!estaNoSetor()) {
+            moverPara(centroX, centroY);
             return;
         }
 
-        fazVarredura();
+        patrulhaSetor();
     }
 
-    private void atualizaTemporizadores() {
-        if (recebendoEnergia && ++turnosSemEnergia > 2) {
-            recebendoEnergia = false;
-        }
-        if (emCombate && ++turnosSemDano > 2) {
-            emCombate = false;
-            turnosCombate = 0;
-            jaDividiuNoCombate = false;
-        }
-        if (validadeCogumelo > 0) validadeCogumelo--;
+    private void inicializaSetor() {
+        int base = recebeuHandshake ? indiceEquipe : getId();
+        int idx = Math.abs(base) % 15;
+        int col = idx % 5;
+        int lin = idx / 5;
+
+        setorMinX = col * Constants.LARGURA_MAPA / 5;
+        setorMaxX = (col + 1) * Constants.LARGURA_MAPA / 5;
+        setorMinY = lin * Constants.ALTURA_MAPA / 3;
+        setorMaxY = (lin + 1) * Constants.ALTURA_MAPA / 3;
+
+        dirH = (idx % 2 == 0) ? DIREITA : ESQUERDA;
+        dirV = (idx % 4 < 2) ? BAIXO : CIMA;
+        setDirecao(dirH);
     }
 
-    private boolean estaDentroDoSetor() {
-        return getX() >= setorMinX + 10 && getX() <= setorMaxX - 10
-                && getY() >= setorMinY + 10 && getY() <= setorMaxY - 10;
+    private boolean estaNoSetor() {
+        return getX() >= setorMinX + 15 && getX() <= setorMaxX - 15
+                && getY() >= setorMinY + 15 && getY() <= setorMaxY - 15;
     }
 
-    private void fazVarredura() {
-        if (varreduraHorizontal) {
-            int proximoX = getX() + (direcaoHorizontal == DIREITA ? 5 : -5);
-            if (proximoX < setorMinX + 10 || proximoX > setorMaxX - 10 || !podeMoverPara(direcaoHorizontal)) {
-                varreduraHorizontal = false;
-                passosVerticais = 0;
-                para();
+    private void patrulhaSetor() {
+        int proxX = getX() + (dirH == DIREITA ? 5 : -5);
+        if (proxX < setorMinX + 15 || proxX > setorMaxX - 15 || !podeMoverPara(dirH)) {
+            dirH = direcaoOposta(dirH);
+            int proxY = getY() + (dirV == BAIXO ? 15 : -15);
+            if (proxY < setorMinY + 15 || proxY > setorMaxY - 15 || !podeMoverPara(dirV)) {
+                dirV = direcaoOposta(dirV);
+            }
+            if (podeMoverPara(dirV)) {
+                setDirecao(dirV);
                 return;
             }
-            setDirecao(direcaoHorizontal);
-            return;
         }
-
-        int proximoY = getY() + (direcaoVertical == BAIXO ? 5 : -5);
-        if (passosVerticais < 6 && proximoY >= setorMinY + 10
-                && proximoY <= setorMaxY - 10 && podeMoverPara(direcaoVertical)) {
-            setDirecao(direcaoVertical);
-            passosVerticais++;
-            return;
-        }
-
-        varreduraHorizontal = true;
-        direcaoHorizontal = direcaoOposta(direcaoHorizontal);
-        passosVerticais = 0;
-        para();
-    }
-
-    private void moverParaCoordenada(int destinoX, int destinoY) {
-        int dx = destinoX - getX();
-        int dy = destinoY - getY();
-        if (dx == 0 && dy == 0) {
-            para();
-            return;
-        }
-        int primeira = Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? DIREITA : ESQUERDA) : (dy > 0 ? BAIXO : CIMA);
-        int segunda = Math.abs(dx) >= Math.abs(dy) ? (dy > 0 ? BAIXO : CIMA) : (dx > 0 ? DIREITA : ESQUERDA);
-        if (podeMoverPara(primeira)) setDirecao(primeira);
-        else if ((dx != 0 || dy != 0) && podeMoverPara(segunda)) setDirecao(segunda);
+        if (podeMoverPara(dirH)) setDirecao(dirH);
         else para();
     }
 
-    private boolean deveDividir() {
-        return !jaDividiuNoCombate && turnosCombate >= 2
+    private void moverPara(int destinoX, int destinoY) {
+        int dx = destinoX - getX();
+        int dy = destinoY - getY();
+        if (Math.abs(dx) <= 5 && Math.abs(dy) <= 5) {
+            para();
+            return;
+        }
+        int prim = Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? DIREITA : ESQUERDA) : (dy > 0 ? BAIXO : CIMA);
+        int seg = Math.abs(dx) >= Math.abs(dy) ? (dy > 0 ? BAIXO : CIMA) : (dx > 0 ? DIREITA : ESQUERDA);
+        if (podeMoverPara(prim)) setDirecao(prim);
+        else if ((dx != 0 && dy != 0) && podeMoverPara(seg)) setDirecao(seg);
+        else para();
+    }
+
+    private void iniciaFuga() {
+        dirFuga = direcaoOposta(getDirecao());
+        if (!podeMoverPara(dirFuga)) dirFuga = direcaoOposta(dirH);
+        fugaTicks = 6;
+        emCombate = false;
+        turnosCombate = 0;
+        jaDividiu = false;
+        setDirecao(dirFuga);
+    }
+
+    private void executaFuga() {
+        if (podeMoverPara(dirFuga)) setDirecao(dirFuga);
+        else para();
+        fugaTicks--;
+    }
+
+    private boolean deveDividirCombate() {
+        return !jaDividiu && turnosCombate >= 2
                 && getEnergia() >= 700 && getEnergia() <= 1300
                 && energiaInimigo <= 350 && getEnergia() >= energiaInimigo * 2 + 100
                 && podeDividir();
     }
 
-    private void iniciaRecuo() {
-        direcaoRecuo = direcaoOposta(getDirecao());
-        if (!podeMoverPara(direcaoRecuo)) direcaoRecuo = direcaoOposta(direcaoHorizontal);
-        recuoTicks = 6;
-        emCombate = false;
-        turnosCombate = 0;
-        jaDividiuNoCombate = false;
-        setDirecao(direcaoRecuo);
-    }
-
-    private void executaRecuo() {
-        if (podeMoverPara(direcaoRecuo)) setDirecao(direcaoRecuo);
-        else para();
-        recuoTicks--;
+    private void atualizaTemporizadores() {
+        if (recebendoEnergia && ++turnosSemEnergia > 2) recebendoEnergia = false;
+        if (emCombate && ++turnosSemDano > 2) {
+            emCombate = false;
+            turnosCombate = 0;
+            jaDividiu = false;
+        }
+        if (validadeCogumelo > 0) validadeCogumelo--;
     }
 
     @Override
     public void recebeuEnergia() {
         recebendoEnergia = true;
         turnosSemEnergia = 0;
-        if (turno - ultimoEnvioCogumelo >= 6) {
-            ultimoEnvioCogumelo = turno;
+        if (turno - ultimoEnvioEnergia >= 6) {
+            ultimoEnvioEnergia = turno;
             enviaMensagem("C|" + getX() + "|" + getY());
         }
     }
@@ -223,7 +194,7 @@ public class AgenteGuarana extends Agente {
     public void tomouDano(int energiaRestanteInimigo) {
         if (!emCombate) {
             turnosCombate = 0;
-            jaDividiuNoCombate = false;
+            jaDividiu = false;
         }
         emCombate = true;
         turnosSemDano = 0;
@@ -235,7 +206,7 @@ public class AgenteGuarana extends Agente {
     public void ganhouCombate() {
         emCombate = false;
         turnosCombate = 0;
-        jaDividiuNoCombate = false;
+        jaDividiu = false;
     }
 
     @Override
@@ -243,9 +214,13 @@ public class AgenteGuarana extends Agente {
         if (msg == null) return;
         try {
             String[] p = msg.split("\\|");
-            if (p[0].equals("C") && p.length == 3 && !emCombate && getEnergia() < 1800) {
-                alvoCogumeloX = Integer.parseInt(p[1]);
-                alvoCogumeloY = Integer.parseInt(p[2]);
+            if (p[0].equals("H") && p.length == 2) {
+                recebeuHandshake = true;
+                int idAliado = Integer.parseInt(p[1]);
+                if (idAliado < getId()) indiceEquipe++;
+            } else if (p[0].equals("C") && p.length == 3) {
+                cogumeloX = Integer.parseInt(p[1]);
+                cogumeloY = Integer.parseInt(p[2]);
                 validadeCogumelo = 12;
             }
         } catch (Exception ignored) {
